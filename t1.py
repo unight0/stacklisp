@@ -261,7 +261,7 @@ def dump_ast(ast):
 
         
 # Stack machine commands
-CMD_PUSH, CMD_BLKB, CMD_BLKE, CMD_LAM, CMD_DROP, CMD_TD, CMD_FD, CMD_D, CMD_ND, CMD_APPL, CMD_ENVV = range(11)
+CMD_PUSH, CMD_BLKB, CMD_BLKE, CMD_LAM, CMD_DROP, CMD_TD, CMD_FD, CMD_D, CMD_ND, CMD_APPL, CMD_ENVV, CMDR_BD, CMDR_ED, CMDR_ID = range(14) # Only used in raw code
 
 CMDSTR = {
     CMD_BLKB: '[',
@@ -353,6 +353,99 @@ def translate(ast):
         r += tr_expr(e)
     return r
 
+def dict_has_val(d, v):
+    for k in d:
+        if d[k] == v: return k
+    return -1
+
+# Generates symbol table
+def symblgen(t):
+    symbls = {}
+    r = []
+    i = 0
+    for e in t:
+        match e:
+            case (cmd, data):
+                if cmd != CMD_ENVV:
+                    r.append((cmd, data))
+                    continue
+                if not data in symbls:
+                    symbls[data] = i
+                    i += 1
+                r.append((CMD_ENVV, symbls[data]))
+                continue
+            case data:
+                r.append(data)
+    print("SYMBLGEN:", symbls)
+    return (symbls, r)
+
+
+
+# Separates data (strings) from code, generates references to
+# it and replaces push(str) to ENVV
+def genrefs(t):
+    d = {}
+    r = -1
+    nt = []
+
+    for e in t:
+        match e:
+            case (cmd, data):
+                if cmd != CMD_PUSH: continue
+                if type(data) != str: continue
+                if (k:=dict_has_val(d, data)) != -1:
+                    nt += [CMD_ENVV, k]
+                    continue
+                d[r] = data
+                r -= 1
+                nt += [CMD_ENVV, r]
+                continue
+        nt.append(e)
+        
+    print("GENREFS:", d)
+    return (d, nt)
+
+# Takes dictionary, creates data[string] section in the beginning of the code
+# Note: string data is in form of [CMDR_ID, (id), CMDR_BD, ..., CMD_ED]
+def gendata(d):
+    dt = []
+    for k in d:
+        v = d[k]
+        dt += [CMDR_ID, k]
+        dt += [CMDR_BD] + list(v) + [CMDR_ED]
+    return dt
+
+def raw(t):
+    r = genrefs(t)
+    return r
+
+# (CMD_ENVV, STR) -> CMD_ENVV, ID (from symbltable)
+# (CMD_ENVV, NUM) -> CMD_ENVV, NUM
+def link(t, symbltable):
+    nt = []
+    for e in t:
+        match e:
+            case (cmd, data):
+                if cmd!= CMD_ENVV: continue
+                nt += [CMD_ENVV, symbltable[data]]
+                continue
+        nt += [e]
+
+    return nt
+
+
+
+# (CMD_PUSH, N) -> CMD_PUSH, N
+def naked_push(t):
+    nt = []
+    for e in t:
+        if type(e) == tuple:
+            if e[0] == CMD_PUSH:
+                nt += [e[0], e[1]]
+                continue
+        nt += [e]
+    return nt
+
 def dump(output):
     for cmd in output:
         if type(cmd) == tuple:
@@ -367,7 +460,21 @@ def dump(output):
 def main(files):
     for f in files:
         with open(f, "r") as c:
-            dump(translate(parse(lex(c.read()))))
+            dump(r:=translate(parse(lex(c.read()))))
+            #print("------------------------")
+
+            # Generate symbols
+            symbls, r = symblgen(r)
+            dsym, r = raw(r)
+            #symbls |= dsym
+            print("Symbol ids from: ", symbls)
+            code = naked_push(link(r, symbls))
+
+            datasection = gendata(dsym)
+            
+            code = datasection + code
+            
+            print("FINAL CODE: ", code)
 
 if __name__ == "__main__":
     from sys import argv
