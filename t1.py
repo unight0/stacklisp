@@ -1,451 +1,10 @@
 #!/bin/env python3
-ALTERED = {
-    '"': '"',
-    '\\': '\\',
-    'n': '\n'
-}
+from lexer import *
+from parser import *
+from codegen import *
+from binput import *
 
-def altered(char):
-    if char in ALTERED:
-        return ALTERED[char]
-    print("\\%s is not a valid control sequence" % char)
-    exit(1)
-
-def skip_spaces(i, code):
-    while code[i].isspace():
-        i += 1
-        if i >= len(code):
-            break
-    return i
-
-def skip_comment(i, code):
-    while code[i] != '\n':
-        i += 1
-        if i > len(code):
-            break
-    return i
-        
-def lex(code):
-    lexems = []
-    i = 0
-    while i < len(code):
-        # Skip spaces
-        if code[i].isspace():
-            i=skip_spaces(i, code)
-            continue
-        # Skip comments
-        if code[i] == ';':
-            i=skip_comment(i, code)
-            continue
-        # Parens
-        if code[i] == '(':
-            lexems.append(('LPAREN','('))
-            i += 1
-        elif code[i] == ')':
-            lexems.append(('RPAREN',')'))
-            i += 1
-        # Easy quote
-        elif code[i] == "'":
-            lexems.append(('EQUOTE',"'"))
-            i += 1
-        # Backward quote
-        elif code[i] == '`':
-            lexems.append(('BQUOTE',"`"))
-            i += 1
-        # Char
-        elif code[i] == '?':
-            if i+1 >= len(code):
-                print("Got EOF while parsing char")
-                exit(1)
-            ch = code[i+1]
-            num = str(ord(ch))
-            lexems.append(('NUMBER',num))
-            i += 2
-        # Comma
-        elif code[i] == ',':
-            # ,@ lexem
-            #if i+1 < len(code):
-            #    if code[i+1] == '@':
-            #        lexems.append(('AT', ',@'))
-            #        i += 2
-            #        continue
-            lexems.append(('COMMA',","))
-            i += 1
-
-        # Number
-        elif code[i].isnumeric() or code[i] == '-':
-            num = code[i]
-            i += 1
-            # Floats also
-            has_dot = False
-            while code[i].isnumeric() or (code[i] == '.' and not has_dot):
-                num += code[i]
-                i += 1
-                if i >= len(code):
-                    break
-            # Not num
-            if num == '-':
-                lexems.append(('NAME',num))
-            else:
-                lexems.append(('NUMBER',num))
-        # String
-        elif code[i] == '"':
-            string = ''
-            alter = False
-            i += 1
-            while code[i] != '"' or alter:
-                # \ stuff
-                if alter:
-                    string += altered(code[i])
-                    alter = False
-                else:
-                    if code[i] == '\\':
-                        alter = True
-                    else:
-                        string += code[i]
-                i += 1
-                if i >= len(code):
-                    break
-            # Skip '"'
-            if not i >= len(code):
-                i += 1
-            lexems.append(('STR',string))
-        # Name
-        else:
-            name = ''
-            while not code[i].isspace() and not (code[i] == '(' or code[i] == ')'):
-                name += code[i]
-                i += 1
-                if i >= len(code):
-                    break
-            if name.lower() == 'lambda':
-                lexems.append(('LAMBDA',name))
-
-            elif name.lower() == 'quote':
-                lexems.append(('QUOTE',name))
-
-            #elif name.lower() == 'defun':
-            #    lexems.append(('DEFUN',name))
-
-            elif name.lower() == 'defvar':
-                lexems.append(('DEFVAR',name))
-
-            #elif name.lower() == 'defmacro':
-            #    lexems.append(('DEFMACRO',name))
-                
-            elif name.lower() == 'block':
-                lexems.append(('BLOCK',name))
-
-            #elif name.lower() == 'if':
-            #    lexems.append(('IF',name))
-
-            #elif name.lower() == 'cond':
-            #    lexems.append(('COND',name))
-
-            #elif name.lower() == 'or':
-            #    lexems.append(('OR',name))
-
-            #elif name.lower() == 'and':
-            #    lexems.append(('AND',name))
-                
-            else:
-                lexems.append(('NAME',name))
-    return lexems
-
-
-# Ast:
-# + Ast type
-# + Value (string)
-# + Children (list)
-class Ast:
-    def __init__(self, t, ch=[], v=''):
-        self.t = t
-        self.ch = ch
-        self.v = v
-
-ATYP_ROOT, ATYP_BLOCK, ATYP_APPL, ATYP_LIST, ATYP_FUN, ATYP_ATOM = range(6)
-
-ASTTYPE = {
-    ATYP_ROOT: 'Root',
-    ATYP_BLOCK: 'Block',
-    ATYP_APPL: 'Function application',
-    ATYP_LIST: 'List',
-    ATYP_FUN: 'Function',
-    ATYP_ATOM: 'Atom'
-}
-
-def expect(i, l, t):
-    if i >= len(l):
-        print("Unexpected EOF")
-        exit(-2)
-        
-    if l[i][0] != t:
-        print(f"Unexpected lexem at {i}:{l[i][1]}; expected {t}",)
-        exit(-3)
-    return i + 1
-
-def take_rlist(i, l) -> (Ast, int):
-    rlist = []
-    while l[i][0] != 'RPAREN':
-        r, i = take_expr(i, l)
-        rlist.append(r)
-    i = expect(i, l, 'RPAREN')
-    return rlist, i
-
-def take_block(i, l) -> (Ast, int):
-    i = expect(i, l, 'BLOCK')
-    e = Ast(ATYP_BLOCK)
-    e.ch, i = take_rlist(i, l)
-    return e, i
-
-def take_fun(i, l) -> (Ast, int):
-    i = expect(i, l, 'LAMBDA')
-    args, i = take_list(i, l)
-    body, i = take_expr(i, l)
-    i = expect(i, l, 'RPAREN')
-    return Ast(ATYP_FUN, [args, body]), i
-
-def take_list(i, l) -> (Ast, int):
-    e = Ast(ATYP_LIST)
-    i = expect(i, l, 'LPAREN')
-    e.ch, i = take_rlist(i, l)
-    return e, i
-    
-def take_appl(i, l) -> (Ast, int):
-    e = Ast(ATYP_APPL)
-    fun, i = take_expr(i, l)
-    e.ch, i = take_rlist(i, l)
-    e.ch = [fun] + e.ch
-    return e, i
-
-def take_expr(i, l) -> (Ast, int):
-    if l[i][0] == 'NUMBER' or l[i][0] == 'STR' or l[i][0] == 'NAME':
-        return Ast(ATYP_ATOM,[],l[i]), i+1
-    
-    i = expect(i, l, 'LPAREN')
-    if l[i][0] == 'BLOCK':
-        return take_block(i, l)
-    elif l[i][0] == 'LAMBDA':
-        return take_fun(i, l)
-        
-    return take_appl(i, l)
-
-def parse(lexems):
-    root = Ast(ATYP_ROOT)
-
-    i = 0
-    while i < len(lexems):
-        e, i = take_expr(i, lexems)
-        root.ch.append(e)
-
-    return root
-
-def dump_ast(ast):
-    if ast.t == ATYP_ATOM: print(ast.v); return
-    print(ASTTYPE[ast.t],end=' ')
-    if len(ast.ch) == 0: return
-    print('[')
-    for c in ast.ch:
-        dump_ast(c)
-    print(']')
-
-
-#class Env:
-#    # df == definitions
-#    # st == stack
-#    # dst == data stack
-#    def __init__(self, df={}, st=[], dst=[]):
-#        self.df = df
-#        self.st = st
-#        self.dst = dst
-
-        
-# Stack machine commands
-CMD_PUSH, CMD_BLKB, CMD_BLKE, CMD_LAM, CMD_DROP, CMD_TD, CMD_FD, CMD_D, CMD_ND, CMD_APPL, CMD_ENVV, CMDR_BD, CMDR_ED, CMDR_ID = range(14) # Only used in raw code
-
-CMDSTR = {
-    CMD_BLKB: '[',
-    CMD_BLKE: ']',
-    CMD_LAM:  'L',
-    CMD_DROP: 'drop',
-    CMD_TD:   ">D",
-    CMD_ND:   '>ND',
-    CMD_FD:   "D>",
-    CMD_D:    'D',
-    CMD_APPL: 'A',
-}
-
-def tr_expr(e):
-    if e.t == ATYP_ATOM:
-        return tr_atom(e)
-    if e.t == ATYP_BLOCK:
-        return tr_block(e)
-    if e.t == ATYP_APPL:
-        return tr_appl(e)
-    if e.t == ATYP_FUN:
-        return tr_fun(e)
-    print(f"Unexpected AST type: {ASTTYPE[e.t]}")
-
-def tr_atom(e):
-    if e.v[0] == 'NUMBER':
-        return [(CMD_PUSH, e.v[1])]
-    # TODO: change later
-    if e.v[0] == 'STR':
-        return [(CMD_PUSH, e.v[1])]
-    assert(e.v[0] == 'NAME')
-    return [(CMD_ENVV, e.v[1])]
-
-def tr_fun(e):
-    argnum = len(e.ch[0].ch)
-    body = tr_body(e.ch[1], e.ch[0].ch)
-    return [CMD_BLKB] + body + [CMD_BLKE] + [(CMD_PUSH, argnum), CMD_LAM]
-
-# NOTE: called only from tr_fun()
-# Replaces every occurence of a variable with a
-# 'get' from a data stack
-def tr_body(e, args):
-    return substargs(tr_expr(e), args)
-
-def substargs(e, args):
-    ad = makedict(args)
-    i = 0
-    r = []
-    while i < len(e):
-        if type(e[i]) == tuple:
-            if e[i][0] == CMD_ENVV:
-                if e[i][1] in ad:
-                    r += [(CMD_PUSH, ad[e[i][1]]), CMD_D]
-                    i += 1
-                    continue
-        r.append(e[i])
-        i += 1
-
-    return r
-
-def makedict(lst):
-    d = {}
-    for (i,e) in enumerate(lst):
-        d[e.v[1]] = i
-    return d
-    
-def tr_appl(e):
-    f = tr_expr(e.ch[0])
-    r = []
-    for a in e.ch[1:]:
-        r += tr_expr(a)
-    argc = len(e.ch[1:])
-
-    # Ignore this monstrosity
-    if argc == 1:
-        return r + [CMD_TD] + f + [(CMD_PUSH, argc), CMD_APPL]
-    return r + [(CMD_PUSH, argc), CMD_ND] + f + [(CMD_PUSH, argc), CMD_APPL]
-
-def tr_block(e):
-    r = [CMD_BLKB]
-    for c in e.ch:
-        r.append(tr_expr(c))
-    return r + [CMD_BLKE]
-
-def translate(ast):
-    assert(ast.t == ATYP_ROOT)
-    r = []
-    for e in ast.ch:
-        r += tr_expr(e)
-    return r
-
-def dict_has_val(d, v):
-    for k in d:
-        if d[k] == v: return k
-    return -1
-
-# Generates symbol table
-def symblgen(t):
-    symbls = {}
-    r = []
-    i = 0
-    for e in t:
-        match e:
-            case (cmd, data):
-                if cmd != CMD_ENVV:
-                    r.append((cmd, data))
-                    continue
-                if not data in symbls:
-                    symbls[data] = i
-                    i += 1
-                r.append((CMD_ENVV, symbls[data]))
-                continue
-            case data:
-                r.append(data)
-    print("SYMBLGEN:", symbls)
-    return (symbls, r)
-
-
-
-# Separates data (strings) from code, generates references to
-# it and replaces push(str) to ENVV
-def genrefs(t):
-    d = {}
-    r = -1
-    nt = []
-
-    for e in t:
-        match e:
-            case (cmd, data):
-                if cmd != CMD_PUSH: continue
-                if type(data) != str: continue
-                if (k:=dict_has_val(d, data)) != -1:
-                    nt += [CMD_ENVV, k]
-                    continue
-                d[r] = data
-                r -= 1
-                nt += [CMD_ENVV, r]
-                continue
-        nt.append(e)
-        
-    print("GENREFS:", d)
-    return (d, nt)
-
-# Takes dictionary, creates data[string] section in the beginning of the code
-# Note: string data is in form of [CMDR_ID, (id), CMDR_BD, ..., CMD_ED]
-def gendata(d):
-    dt = []
-    for k in d:
-        v = d[k]
-        dt += [CMDR_ID, k]
-        dt += [CMDR_BD] + list(v) + [CMDR_ED]
-    return dt
-
-def raw(t):
-    r = genrefs(t)
-    return r
-
-# (CMD_ENVV, STR) -> CMD_ENVV, ID (from symbltable)
-# (CMD_ENVV, NUM) -> CMD_ENVV, NUM
-def link(t, symbltable):
-    nt = []
-    for e in t:
-        match e:
-            case (cmd, data):
-                if cmd!= CMD_ENVV: continue
-                nt += [CMD_ENVV, symbltable[data]]
-                continue
-        nt += [e]
-
-    return nt
-
-
-
-# (CMD_PUSH, N) -> CMD_PUSH, N
-def naked_push(t):
-    nt = []
-    for e in t:
-        if type(e) == tuple:
-            if e[0] == CMD_PUSH:
-                nt += [e[0], e[1]]
-                continue
-        nt += [e]
-    return nt
-
+# Output translated code in a neat way
 def dump(output):
     for cmd in output:
         if type(cmd) == tuple:
@@ -457,24 +16,61 @@ def dump(output):
         print(CMDSTR[cmd], end=' ')
     print()
 
+
+
+# Main section
 def main(files):
     for f in files:
+        contents = ""
         with open(f, "r") as c:
-            dump(r:=translate(parse(lex(c.read()))))
-            #print("------------------------")
-
-            # Generate symbols
-            symbls, r = symblgen(r)
-            dsym, r = raw(r)
-            #symbls |= dsym
-            print("Symbol ids from: ", symbls)
-            code = naked_push(link(r, symbls))
-
-            datasection = gendata(dsym)
+            contents = c.read()
             
-            code = datasection + code
+        # Lex source code
+        l = lex(contents)
+        
+        p = parse(l)
+        
+        # Do most of translation
+        tr = translate(p)
+
+        # Output neat version
+        dump(tr)
+        
+        # Generate symbols
+        symbls, tr = symblgen(tr)
+        
+        # Generate data[string] symbols, replace strings by IDs(references)
+        dsym, tr = genrefs(tr)
+        
+        # Generate declarations for data IDs
+        # Basically define strings at the top of the file, and then just reference to them by id
+        # Note: during compilation, some preprocessing may be done to replace CMD_ENVV, (ID)
+        # by (PTR) for optimization purposes
+        datasection = gendata(dsym)
+        
+        # Final code
+        code = datasection + tr
+
+        print("----------------------------------------")
+        print(code)
+        # Don't forget symbol table!
+        print(symbls)
+
+
+        print(datasection)
+        # Attach lengths to code
+        lcode = lenattach_data(datasection) + lenattach(tr)
+
+        # Get codebytes
+        cb = lencodebytes(lcode)
+
+        # Convert symbol table into bytes
+        # Note (k, v) --> (v, k) for easier reading
+        sb = symbytes(symbls)
+
+        fileput("out.bin", cb, sb)
+
             
-            print("FINAL CODE: ", code)
 
 if __name__ == "__main__":
     from sys import argv
