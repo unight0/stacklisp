@@ -41,7 +41,7 @@ def main(files):
         
         # Generate data[string] symbols, replace strings by IDs(references)
         dsym, tr = genrefs(tr)
-        
+
         # Generate declarations for data IDs
         # Basically define strings at the top of the file, and then just reference to them by id
         # Note: during compilation, some preprocessing may be done to replace CMD_ENVV, (ID)
@@ -57,7 +57,6 @@ def main(files):
         print(symbls)
 
 
-        print(datasection)
         # Attach lengths to code
         lcode = lenattach_data(datasection) + lenattach(tr)
 

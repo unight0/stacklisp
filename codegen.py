@@ -16,7 +16,7 @@ def tr_expr(e):
 
 def tr_atom(e):
     if e.v[0] == 'NUMBER':
-        return [(CMD_PUSH, e.v[1])]
+        return [(CMD_PUSH, int(e.v[1]))]
     # TODO: change later
     if e.v[0] == 'STR':
         return [(CMD_PUSH, e.v[1])]
@@ -61,6 +61,7 @@ def tr_appl(e):
     r = []
     for a in e.ch[1:]:
         r += tr_expr(a)
+        
     argc = len(e.ch[1:])
 
     # Ignore this monstrosity
@@ -116,18 +117,25 @@ def genrefs(t):
     nt = []
 
     for e in t:
-        match e:
-            case (cmd, data):
-                if cmd != CMD_PUSH: continue
-                if type(data) != str: continue
-                if (k:=dict_has_val(d, data)) != -1:
-                    nt += [CMD_ENVV, k]
-                    continue
-                d[r] = data
-                r -= 1
-                nt += [CMD_ENVV, r]
-                continue
-        nt.append(e)
+        if type(e) != tuple:
+            nt.append(e)
+            continue
+
+        cmd, data = e
+        
+        if cmd != CMD_PUSH or type(data) != str:
+            nt += [cmd, data]
+            continue
+
+        # Already in the dictionary
+        if (k:=dict_has_val(d, data)) != -1:
+            nt += [CMD_ENVV, k]
+            continue
+
+        # Add new entry
+        d[r] = data
+        nt += [CMD_ENVV, r]
+        r -= 1
         
     return (d, nt)
 
