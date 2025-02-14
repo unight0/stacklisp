@@ -7,7 +7,6 @@ This is a simple pet project. Its goals are to:
 3. (optional) Compile stackmachine code
 
 ## Current state
-This is not yet finished. Only t1 (translation stage) has been more-or-less finished.
 This project is not yet fully finished. T1 translates simple lisp code
 into bytecode, writes it to file. VM has been implemented.
 
@@ -16,7 +15,7 @@ The next short-term goal is to expand supported syntax in t1.
 
 ## How to use?
 
-```
+```sh
 # Translates into stackmachine code, outputs in readable format, writes the bytecode to out.bin
 ./t1 <file>
 # Reads bytecode from file, outputs in readable format
