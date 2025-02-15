@@ -10,13 +10,27 @@
 #include "utils.h"
 
 
-#define LINK_TABLE_SZ 5
+#define LINK_TABLE_SZ 12
 LinkTable link_table[LINK_TABLE_SZ] = {
     {"format", s_format, 1, -1},
+
+    /* Arithmetics */
     {"+", s_add, 2, -1},
     {"*", s_mul, 2, -1},
+    {"-", s_sub, 2, 2},
+    {"/", s_div, 2, 2},
+
+    /* Basic functionality */
+    {"atom", s_atom, 2, 2},
     {"cons", s_cons, 2, -1},
-    {"nil", 0, 2, -1}
+    {"car", s_car, 1, 1},
+    {"cdr", s_cdr, 1, 1},
+    {"nil", 0, 0, 0},
+
+
+    /* Logic operations */
+    {"and", s_and, 2, -1},
+    {"or", s_or, 2, -1}
 };
 
 /* Main code **********************************/
@@ -178,7 +192,6 @@ void init_vm(char *code, size_t sz, size_t *ptr) {
     load_symbols(code, sz, ptr);
     link_symbols();
     load_data(code, sz, ptr);
-    //print_code(code, sz, *ptr);
 }
 
 void free_symbols() {
@@ -218,6 +231,7 @@ void deinit_vm() {
     free_symbols();
     free_rstrs();
     free_ufuncs();
+    if (env) free(env);
     if (stack.arr) free(stack.arr);
     if (data_stack.arr) free(data_stack.arr);
 }
@@ -259,7 +273,10 @@ void envv_env(Raw id) {
 // Dispatch between envv_env and envv_str
 void exec_envv(Raw id) {
     // String id
-    if (id < 0) return envv_str(id);
+    if (id < 0) {
+	envv_str(id);
+	return;
+    }
     // Just variable in the environment
     envv_env(id);
 }
@@ -277,9 +294,11 @@ void sys_apply(SysFunction fn, Raw argnum) {
     fn(argnum);
 }
 
-void user_apply(UserFunction *fn, Raw argnum) {
+void user_apply(Raw idx, Raw argnum) {
     //TODO: use it
     (void)argnum;
+
+    UserFunction *fn = &ufuncs[idx];
     
     size_t ptr = 0;
     for (;ptr < fn->sz;) {
@@ -288,7 +307,8 @@ void user_apply(UserFunction *fn, Raw argnum) {
 	    continue;
 	}
 	exec_instr(fn->cmds, fn->sz, &ptr);
-    }    
+    }
+
 }
 
 // Dispatch between sys_apply() and user_apply()
@@ -308,11 +328,30 @@ void apply() {
 	return;
     }
 
-    if (fun.t == 'p')
-	return sys_apply((SysFunction)fun.raw,
-			 argnum);
+    if (fun.t == 'p') {
+	sys_apply((SysFunction)fun.raw,
+		  argnum);
+	return;
+    }
    
-    user_apply((UserFunction*)fun.raw, argnum);
+    user_apply(fun.raw, argnum);
+}
+
+void do_if() {
+    assert(stack.sz >= 3);
+
+    Data cond = stack_pop(&stack);
+    Data then = stack_pop(&stack);
+    Data otherwise = stack_pop(&stack);
+
+    // NIL --> do otherwise
+    if (cond.t == 'p' && cond.raw == 0) {
+	user_apply(otherwise.raw, 0);
+	return;
+    }
+
+    // Do then
+    user_apply(then.raw, 0);
 }
 
 void exec_instr(char *code, size_t sz, size_t *ptr) {
@@ -320,9 +359,9 @@ void exec_instr(char *code, size_t sz, size_t *ptr) {
 
     #ifdef DEBUG_STACK
     if (code[*ptr] < NUM_CMDS) {
-	printf("CURRENT POINTER: %8lu\nCURRENT COMMAND: %8s\n", *ptr, cmdstr[code[*ptr]]);
+	printf("CURRENT POINTER: %8lu\nCURRENT COMMAND: %8s\n", *ptr, cmdstr[(int)code[*ptr]]);
     }
-    else printf("CURRENT POINTER: %8lu\nCURRENT COMMAND IS INVALID\n");
+    else printf("CURRENT POINTER: %8lu\nCURRENT COMMAND IS INVALID\n", *ptr);
     dump_both_stacks();
     //printf("BLOCK DEPTH: %lu\n", block_depth);
     #endif
@@ -379,15 +418,25 @@ void exec_instr(char *code, size_t sz, size_t *ptr) {
 	break;
     case CMD_LAM:
 	++*ptr;
+
 	// Add to the list (will be deallocated)
 	ALLOCNEW(ufuncs, UserFunction, ufuncs_sz) = (UserFunction) {
 		blk_sz,
 		block
 	    };
+
+	block = NULL;
+	blk_sz = 0;
+	// Pop argnum off the stack (unused)
+	(void)stack_pop(&stack);
 	
 	// Push the lambda onto the stack
 	stack_push(&stack,
-		   (Data){'l', (Raw)&ufuncs[ufuncs_sz-1]});
+		   (Data){'l', ufuncs_sz-1});
+	break;
+    case CMD_IF:
+	++*ptr;
+	do_if();
 	break;
     case CMD_BLKB:
 	++*ptr;
@@ -500,10 +549,11 @@ void usage() {
 //[X] Refactor
 //[X] ./vm out.bin --> ./vm [run|read] out.bin
 //[X] lists
-//[] arithmetics
+//[X] arithmetics
 //[] basic common functions
 //[] Redesign data section
 //[] --> Don't allocate rstrs
+//[] Split PUSH into PUSHB PUSHW PUSHD PUSHQ --> great compression!
 int main(int argc, char **argv) {
     if (argc != 3) {
 	usage();
@@ -516,6 +566,7 @@ int main(int argc, char **argv) {
 
     if (!strcmp(argv[1], "read")) {
 	read_and_display(code, codesize);
+	free(code);
 	return 0;
     }
 

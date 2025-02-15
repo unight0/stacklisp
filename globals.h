@@ -20,7 +20,8 @@ const char *cmdstr[] = {
     [CMD_ENVV] = "ENVV",
     [CMDD_BD] = "{",
     [CMDD_ED] = "}",
-    [CMDD_ID] = "ID"
+    [CMDD_ID] = "ID",
+    [CMD_IF] = "IF"
 };
 
 Stack data_stack = {0};

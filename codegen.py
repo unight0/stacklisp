@@ -12,6 +12,8 @@ def tr_expr(e):
         return tr_appl(e)
     if e.t == ATYP_FUN:
         return tr_fun(e)
+    if e.t == ATYP_IF:
+        return tr_if(e)
     print(f"Unexpected AST type: {ASTTYPE[e.t]}")
 
 def tr_atom(e):
@@ -23,10 +25,24 @@ def tr_atom(e):
     assert(e.v[0] == 'NAME')
     return [(CMD_ENVV, e.v[1])]
 
+# Translate lambda into bytecode
+# --> [ cmd1 cmd2 ... ] argnum L
 def tr_fun(e):
     argnum = len(e.ch[0].ch)
     body = tr_body(e.ch[1], e.ch[0].ch)
     return [CMD_BLKB] + body + [CMD_BLKE] + [(CMD_PUSH, argnum), CMD_LAM]
+
+# Translate if statement into bytecode
+# --> [ otherwise... ] 0 L [ then... ] 0 L cond IF
+def tr_if(e):
+    cond = tr_expr(e.ch[0])
+    then = tr_expr(e.ch[1])
+    otherwise = tr_expr(e.ch[2])
+
+    return\
+[CMD_BLKB] + otherwise + [CMD_BLKE] + [(CMD_PUSH, 0), CMD_LAM] +\
+[CMD_BLKB] + then + [CMD_BLKE] + [(CMD_PUSH, 0), CMD_LAM] +\
+cond + [CMD_IF]
 
 # NOTE: called only from tr_fun()
 # Replaces every occurence of a variable with a

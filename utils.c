@@ -15,7 +15,10 @@ char *readfile(const char *filename, size_t *sz) {
     }
 
     // Remove EOF
+
     contents = realloc(contents, --(*sz));
+
+    fclose(f);
     
     return contents;
 }

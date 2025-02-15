@@ -80,8 +80,8 @@ def lex(code):
             # Floats also
             has_dot = False
             while code[i].isnumeric() or (code[i] == '.' and not has_dot):
-                print("ERROR: support for floating-point numbers hasn't been added yet!")
-                exit(1)
+                #print("ERROR: support for floating-point numbers hasn't been added yet!")
+                #exit(1)
                 num += code[i]
                 i += 1
                 if i >= len(code):
@@ -139,8 +139,8 @@ def lex(code):
             elif name.lower() == 'block':
                 lexems.append(('BLOCK',name))
 
-            #elif name.lower() == 'if':
-            #    lexems.append(('IF',name))
+            elif name.lower() == 'if':
+                lexems.append(('IF',name))
 
             #elif name.lower() == 'cond':
             #    lexems.append(('COND',name))

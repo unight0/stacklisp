@@ -21,6 +21,8 @@ enum {
     CMDD_ED, // End data block
     CMDD_ID,  // Declare ID of data block
 
+    CMD_IF,  // If 
+
     NUM_CMDS,
 };
 
@@ -79,7 +81,6 @@ typedef struct {
     Data cdr;
 } Cons;
 
-#define LINK_TABLE_SZ 5
 typedef struct {
     const char *name;
     SysFunction fn;

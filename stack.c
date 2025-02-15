@@ -70,7 +70,14 @@ Data stack_pop(Stack *st) {
     assert(st->sz != 0);
     Data d = st->arr[st->sz-1];
     st->sz--;
-    st->arr = realloc(st->arr, st->sz*sizeof(Data));
+
+    if(st->sz != 0)
+	st->arr = realloc(st->arr, st->sz*sizeof(Data));
+    else {
+	free(st->arr);
+	st->arr = NULL;
+    }
+    
     return d;
 }
 Data stack_top(Stack *st) {

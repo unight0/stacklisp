@@ -43,6 +43,14 @@ def take_fun(i, l) -> (Ast, int):
     i = expect(i, l, 'RPAREN')
     return Ast(ATYP_FUN, [args, body]), i
 
+def take_if(i, l) -> (Ast, int):
+    i = expect(i, l, 'IF')
+    cond, i = take_expr(i, l)
+    then, i = take_expr(i, l)
+    otherwise, i = take_expr(i, l)
+    i = expect(i, l, 'RPAREN')
+    return Ast(ATYP_IF, [cond, then, otherwise]), i
+
 def take_list(i, l) -> (Ast, int):
     e = Ast(ATYP_LIST)
     i = expect(i, l, 'LPAREN')
@@ -65,6 +73,8 @@ def take_expr(i, l) -> (Ast, int):
         return take_block(i, l)
     elif l[i][0] == 'LAMBDA':
         return take_fun(i, l)
+    elif l[i][0] == 'IF':
+        return take_if(i, l)
         
     return take_appl(i, l)
 

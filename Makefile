@@ -1,5 +1,5 @@
 
-CCFLAGS= #-DDEBUG_STACK
+CCFLAGS= -Wall -Werror -Wpedantic -g #-DDEBUG_STACK
 OUT=vm
 
 $(OUT): vm.o utils.o sysfuncs.o stack.o
