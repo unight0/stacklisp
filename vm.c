@@ -10,9 +10,9 @@
 #include "utils.h"
 
 
-#define LINK_TABLE_SZ 12
+#define LINK_TABLE_SZ 13
 LinkTable link_table[LINK_TABLE_SZ] = {
-    {"format", s_format, 1, -1},
+    {"print", s_print, 1, -1},
 
     /* Arithmetics */
     {"+", s_add, 2, -1},
@@ -30,7 +30,8 @@ LinkTable link_table[LINK_TABLE_SZ] = {
 
     /* Logic operations */
     {"and", s_and, 2, -1},
-    {"or", s_or, 2, -1}
+    {"or", s_or, 2, -1},
+    {"eq", s_eq, 2, -1}
 };
 
 /* Main code **********************************/
@@ -93,11 +94,11 @@ void load_symbols(char *code, size_t sz, size_t *ptr) {
 
 // Data == reusable strings
 // Structure:
-// CMDD_ID ID CMDD_BD 0 H 0 i CMDD_ED --> "Hi"
+// CMDD_ID id H i 0 --> "Hi"
 ReuseString load_one_data(char *code, size_t sz, size_t *ptr) {
     Raw id = 0;
     char *str = NULL;
-    size_t str_sz = 0;
+    
     // No id block detected
     if (code[*ptr] != CMDD_ID) {
 	return (ReuseString){0, NULL};
@@ -112,28 +113,11 @@ ReuseString load_one_data(char *code, size_t sz, size_t *ptr) {
 	id |= code[*ptr];
     }
 
-    
-    // No actual data
-    if (code[*ptr] != CMDD_BD) {
-	printf("Read CMDD_ID but found no CMDD_BD right after!\n");
-	exit(1);
-    }
+    str = &code[*ptr];
 
-    ++*ptr;
-
-    // Chars are prefixed with 0
-    for (;!code[*ptr];++*ptr) {
-	++*ptr;
+    // Skip the c-string
+    for (;code[*ptr];++*ptr)
 	EOFCHK(sz, *ptr);
-	ALLOCNEW(str, char, str_sz) = code[*ptr];
-    }
-    ALLOCNEW(str, char, str_sz) = 0;
-
-    if (code[*ptr] != CMDD_ED) {
-	printf("Read data block but found no CMD_ED(']') right after!\n");
-	exit(1);
-    }
-    
     ++*ptr;
     
     return (ReuseString){id, str};
@@ -202,14 +186,6 @@ void free_symbols() {
     free(symbols);
 }
 
-void free_rstrs() {
-    if (!rstrs) return;
-    for (size_t i = 0; i < rstrs_sz; i++) {
-	free(rstrs[i].str);
-    }
-    free(rstrs);
-}
-
 void free_ufunc(UserFunction *f) {
     free(f->cmds);
     f->sz = 0;
@@ -229,18 +205,18 @@ void free_ufuncs() {
 
 void deinit_vm() {
     free_symbols();
-    free_rstrs();
     free_ufuncs();
+    if (rstrs) free(rstrs);
     if (env) free(env);
     if (stack.arr) free(stack.arr);
     if (data_stack.arr) free(data_stack.arr);
 }
 
 
-Data read_data(char *code, size_t sz, size_t *ptr) {
+Data read_data(char *code, size_t sz, size_t *ptr, char bytes) {
     Raw d = 0;
     // BigEndian
-    for (int i = 0; i < 8; ++*ptr, i++) {
+    for (int i = 0; i < bytes; ++*ptr, i++) {
 	EOFCHK(sz, *ptr);
 	d <<= 8;
 	d |= code[*ptr];
@@ -367,13 +343,35 @@ void exec_instr(char *code, size_t sz, size_t *ptr) {
     #endif
     switch (code[*ptr]) {
     case CMD_PUSH:
+	//printf("WARNING: CMD_PUSH is deprecated\n");
 	++*ptr;
-	d = read_data(code, sz, ptr);
+	d = read_data(code, sz, ptr, 8);
 	stack_push(&stack, d);
 	break;
+	/*
+    case CMD_PUSHB:
+	++*ptr;
+	d = DATA(code[*ptr]);
+	stack_push(&stack, d);
+	break;
+    case CMD_PUSHW:
+	++*ptr;
+	d = read_data(code, sz, ptr, 2);
+	stack_push(&stack, d);
+	break;
+    case CMD_PUSHD:
+	++*ptr;
+	d = read_data(code, sz, ptr, 4);
+	stack_push(&stack, d);
+	break;
+    case CMD_PUSHQ:
+	++*ptr;
+	d = read_data(code, sz, ptr, 8);
+	stack_push(&stack, d);
+	break;*/
     case CMD_ENVV:
 	++*ptr;
-	d = read_data(code, sz, ptr);
+	d = read_data(code, sz, ptr, 8);
 	exec_envv(d.raw);
 	break;
     case CMD_DROP:
@@ -494,7 +492,7 @@ void print_code(char *code, size_t sz, size_t i) {
 	if (code[i] == CMD_PUSH || code[i] == CMD_ENVV) {
 	    i++;
 	    Raw data = 0;
-	    
+
 	    for (int j = 0; j < 8; j++) {
 		data <<= 8;
 		data |= code[i+j];
@@ -546,14 +544,10 @@ void usage() {
 }
 
 //TODO:
-//[X] Refactor
-//[X] ./vm out.bin --> ./vm [run|read] out.bin
-//[X] lists
-//[X] arithmetics
-//[] basic common functions
-//[] Redesign data section
-//[] --> Don't allocate rstrs
-//[] Split PUSH into PUSHB PUSHW PUSHD PUSHQ --> great compression!
+//[] format -> print
+//[] define
+//[] floats
+//[] --> conversion, casting?
 int main(int argc, char **argv) {
     if (argc != 3) {
 	usage();

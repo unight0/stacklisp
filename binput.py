@@ -10,6 +10,18 @@ def lenchr(char):
 
 def lennum(i):
     return (i, 8)
+
+def lenpushnum(i, p):
+    if p == CMD_PUSHB:
+        return (i, 1)
+    if p == CMD_PUSHW:
+        return (i, 2)
+    if p == CMD_PUSHD:
+        return (i, 4)
+    if p == CMD_PUSHQ:
+        return (i, 8)
+    print("ERROR: unkown push:", p)
+    exit(1)
 ############################################
 
 # Attaches length to each piece of data
@@ -17,7 +29,16 @@ def lenattach(code):
     code2 = []
     i = 0
     while i < len(code):
-        if code[i] == CMD_PUSH or code[i] == CMD_ENVV:
+        # if code[i] == CMD_PUSHB or code[i] == CMD_PUSHW\
+        #    or code[i] == CMD_PUSHD or code[i] == CMD_PUSHQ:
+        #     # Panic, this shouldn't happen
+        #     if i == len(code)-1:
+        #         print("#########PANIC##########")
+        #         print("Code generation messed up: CMD_PUSH/CMD_ENVV at EOF")
+        #         exit(-2)
+        #     code2 += [lencmd(code[i]), lenpushnum(code[i+1], code[i])]
+        #     i += 2
+        if code[i] == CMD_ENVV or code[i] == CMD_PUSH:
             # Panic, this shouldn't happen
             if i == len(code)-1:
                 print("#########PANIC##########")
@@ -33,38 +54,37 @@ def lenattach(code):
         
     return code2
 
-
-# Same as lenattach, but for data section
+# Same as lenattach(), but for data section
 def lenattach_data(code):
     code2 = []
     i = 0
 
     while i < len(code):
-        # 0 is the prefix before chars
-        if code[i] == 0:
-            # Panic, this shouldn't happen
-            if i == len(code)-1:
-                print("#########PANIC##########")
-                print("Code generation messed up: 0 char prefix at EOF")
-                exit(-2)
-
-            code2 += [lencmd(0), lenchr(code[i+1])]
-            i += 2
-            continue
-        elif code[i] == CMDR_ID:
+        if code[i] == CMDR_ID:
             # Panic, this shouldn't happen
             if i == len(code)-1:
                 print("#########PANIC##########")
                 print("Code generation messed up: CMD_ID at EOF")
                 exit(-2)
+
+            # ID id
             code2 += [lencmd(CMDR_ID), lennum(code[i+1])]
             i += 2
+
+            # Read c-string
+            while code[i] != 0:
+                code2 += [lenchr(code[i])]
+                i += 1
+            code2 += [lenchr(0)]
+            i += 1
             continue
 
-        code2.append(lencmd(code[i]))
-        i += 1
-    
+        print("UNEXPECTED", code[i])
+        exit(1)
+        
     return code2
+
+
 
 # Convert code with lengths to bytes
 def lencodebytes(code):

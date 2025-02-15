@@ -4,7 +4,7 @@
 #include <stdlib.h>
 
 /* Declarations of system functions ***********/
-void s_format(size_t argnum);
+void s_print(size_t argnum);
 void s_add(size_t argnum);
 void s_sub(size_t argnum);
 void s_mul(size_t argnum);
@@ -16,5 +16,6 @@ void s_car(size_t argnum);
 void s_cdr(size_t argnum);
 void s_and(size_t argnum);
 void s_or(size_t argnum);
+void s_eq(size_t argnum);
 
 #endif

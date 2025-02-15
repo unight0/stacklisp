@@ -101,7 +101,7 @@ def translate(ast):
 def dict_has_val(d, v):
     for k in d:
         if d[k] == v: return k
-    return -1
+    return False
 
 # Generates symbol table
 def symblgen(t):
@@ -144,7 +144,7 @@ def genrefs(t):
             continue
 
         # Already in the dictionary
-        if (k:=dict_has_val(d, data)) != -1:
+        if (k:=dict_has_val(d, data)):
             nt += [CMD_ENVV, k]
             continue
 
@@ -156,23 +156,18 @@ def genrefs(t):
     return (d, nt)
 
 
-# ['a', 'b', 'c'] -> [0, ord('a'), 0, ord('b'), 0, ord('c')]
-# Note: 0 is prefix before a char;
-# Needed because the CMD_ED must be recognized
+# Converts to C-string, basically
 def genchars(l):
-    nl = []
-    for c in l:
-        nl += [0, ord(c)]
-    return nl
+    return list(map(ord, l)) + [0]
 
 # Takes dictionary, creates data[string] section in the beginning of the code
-# Note: string data is in form of [CMDR_ID, (id), CMDR_BD, ..., CMD_ED]
+# Note: string data is in form of [CMDR_ID, (id), ..chars.., 0]
 def gendata(d):
     dt = []
     for k in d:
         v = d[k]
         dt += [CMDR_ID, k]
-        dt += [CMDR_BD] + genchars(list(v)) + [CMDR_ED]
+        dt += genchars(list(v))
     return dt
 
 # (CMD_ENVV, STR) -> CMD_ENVV, ID (from symbltable)
@@ -189,7 +184,28 @@ def link(t, symbltable):
 
     return nt
 
-
+# PUSH n < 256 --> PUSHB n
+# PUSH n < 65536 --> PUSHW n
+# PUSH n < 2**32 --> PUSHD n
+# PUSH n < 2**64 --> PUSHQ n 
+def optimize_push(t):
+    nt = []
+    for e in t:
+        if type(e) == tuple:
+            if e[0] == CMD_PUSH:
+                if n < 256:
+                    nt += [CMD_PUSHB, e[1]]
+                if n < 65536:
+                    nt += [CMD_PUSHW, e[1]]
+                if n < 2**32:
+                    nt += [CMD_PUSHD, e[1]]
+                if n < 2**64:
+                    nt += [CMD_PUSHQ, e[1]]
+                else:
+                    print("NUMBER IS TOO BIG:", e[1])
+                    exit(1)
+        nt += [e]
+    return nt
 
 # (CMD_PUSH, N) -> CMD_PUSH, N
 def naked_push(t):

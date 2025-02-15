@@ -21,10 +21,20 @@ enum {
     CMDD_ED, // End data block
     CMDD_ID,  // Declare ID of data block
 
-    CMD_IF,  // If 
-
+    CMD_IF,  // If
+    /*
+    CMD_PUSHB, // Push byte
+    CMD_PUSHW, // Push word
+    CMD_PUSHD, // Push dword
+    CMD_PUSHQ, // Push qword
+    */
     NUM_CMDS,
 };
+
+/*
+#define ANY_PUSH(a) ((a) == CMD_PUSHB || (a) == CMD_PUSHW || (a) == CMD_PUSHD || (a) == CMD_PUSHQ || (a) == CMD_PUSH)
+#define PUSH_LEN(a) (a) == CMD_PUSHB ? 1 : (a) == CMD_PUSHW ? 2 : (a) == CMD_PUSHD ? 4 : (a) == CMD_PUSHQ ? 8 : 0
+*/
 
 typedef int64_t Raw;
 typedef char Type;

@@ -1,2 +1,4 @@
 *.o
 vm
+vgcore.*
+__pycache__

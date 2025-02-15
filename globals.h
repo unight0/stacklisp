@@ -21,7 +21,11 @@ const char *cmdstr[] = {
     [CMDD_BD] = "{",
     [CMDD_ED] = "}",
     [CMDD_ID] = "ID",
-    [CMD_IF] = "IF"
+    [CMD_IF] = "IF",
+    /*[CMD_PUSHB] = "PUSHB",
+    [CMD_PUSHW] = "PUSHW",
+    [CMD_PUSHD] = "PUSHD",
+    [CMD_PUSHQ] = "PUSHQ",*/
 };
 
 Stack data_stack = {0};

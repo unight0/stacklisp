@@ -14,7 +14,7 @@
 #define NIL ((Data){'p',0})
 #define T DATA(1)
 
-void s_format_dispatch(Data d) {
+void s_print_dispatch(Data d) {
     switch (d.t) {
     case 'i':
 	printf("%ld", d.raw);
@@ -27,9 +27,9 @@ void s_format_dispatch(Data d) {
 	break;
     case 'c':
 	printf("(");
-	s_format_dispatch(((Cons*)d.raw)->car);
+	s_print_dispatch(((Cons*)d.raw)->car);
 	printf(" . ");
-	s_format_dispatch(((Cons*)d.raw)->cdr);
+	s_print_dispatch(((Cons*)d.raw)->cdr);
 	printf(")");
 	break;
     case 'p':
@@ -45,12 +45,12 @@ void s_format_dispatch(Data d) {
     }
 }
 
-void s_format(size_t argnum) {
+void s_print(size_t argnum) {
     if (!argnum) return;
 
     for(size_t i = 0; i < argnum; i++) {
 	Data d = stack_pop(&data_stack);
-	s_format_dispatch(d);
+	s_print_dispatch(d);
     }
 }
 
@@ -198,4 +198,21 @@ void s_or(size_t argnum) {
 
     // Return nil if every argument is nil
     RESPUSH(NIL);    
+}
+
+void s_eq(size_t argnum) {
+    assert(argnum >= 2);
+
+    Data first = ARGPOP();
+
+    for (size_t i = 1; i < argnum; i++) {
+	Data pop = ARGPOP();
+
+	if (pop.t != first.t || pop.raw != first.raw) {
+	    RESPUSH(NIL);
+	    return;
+	}
+    }
+
+    RESPUSH(T);
 }
